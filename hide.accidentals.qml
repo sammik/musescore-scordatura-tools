@@ -6,7 +6,6 @@ MuseScore {
     description: "Hide all accidentals of selected notes"
     version: "0.1"
     requiresScore: true
-    pluginType: "window"
     onRun: {
         var sel = curScore ? curScore.selection : null;
         if (sel) {
