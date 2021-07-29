@@ -1,3 +1,7 @@
+// Scordatura Plugin for MuseScore
+// https://github.com/sammik/musescore-scordatura-tools
+// sammik 2021
+
 import QtQuick 2.6
 import QtQuick.Controls 2.2
 import QtQuick.Layouts 1.3
