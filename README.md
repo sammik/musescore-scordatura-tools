@@ -3,6 +3,8 @@ plugin tools for musescore
 
 couple of tools to facilitate a scordatura scores writing
 
+transcribes scordatura notation to conventional notation and vice versa
+
 ## Scordatura plugin
 - live mode
 - translation mode
