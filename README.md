@@ -15,4 +15,4 @@ couple of tools to facilitate a scordatura scores writing
 If You found it useful, You can [buy me a beer](https://paypal.me/pools/c/8BAF6T5CvF).
 Thank You!
 
-![PayPal donate button](https://img.shields.io/static/v1?label=Buy%20me%20a%20beer&message=PayPal&color=9cf)
+[![PayPal donate button](https://img.shields.io/static/v1?label=Buy%20me%20a%20beer&message=PayPal&color=9cf)](https://paypal.me/pools/c/8BAF6T5CvF)
