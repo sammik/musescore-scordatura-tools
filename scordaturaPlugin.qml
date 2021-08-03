@@ -386,6 +386,18 @@ MuseScore {
             score.endCmd();
         }
     }
+    
+    function muteSwitch(part, on){
+        var instrs = part.instruments || [];
+        for (var i = 0; i < instrs.length; ++i) {
+            var instr = instrs[i];
+            var channels = instr.channels;
+            for (var j = 0; j < channels.length; ++j) {
+                var channel = channels[j];
+                channel.mute = on ? false : true;
+            }
+        }
+    }
 
     function createScordaturaSymbol() {
                 
@@ -1096,6 +1108,7 @@ MuseScore {
                                 tunings = [];
                                 aplyDef.state = ""
                                 modeSwitch.checked = false;
+                                muteSwitch(staffLines[0].lines.staff.part, true); //unmute ex-scordatura staff
                                 console.log("String defs - set");
                             }
                             else {
@@ -1103,6 +1116,7 @@ MuseScore {
                                 var validator = validateTuns(tunings);
                                 console.log("Set string defs - validator: ", validator.valid, ", ", validator.instruments);
                                 aplyDef.state = "SET";
+                                muteSwitch(staffLines[0].lines.staff.part); //mute scordatura staff
                                 if (validator.valid) {
                                     menuBar.currentIndex = 0;
                                     validate.visible = false
