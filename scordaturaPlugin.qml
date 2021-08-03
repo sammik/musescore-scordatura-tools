@@ -11,7 +11,7 @@ MuseScore {
     id: scordaturaPlugin
     menuPath: "Plugins.Scordatura Plugin"
     description: "Plugin for scordatura score writing"
-    version: "1.1"
+    version: "1.2"
     
     requiresScore: false
     
