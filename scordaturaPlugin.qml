@@ -11,14 +11,14 @@ MuseScore {
     id: scordaturaPlugin
     menuPath: "Plugins.Scordatura Plugin"
     description: "Plugin for scordatura score writing"
-    version: "1.0"
+    version: "1.1"
     
     requiresScore: false
     
     pluginType: "dock"
     dockArea:   "right"
     
-    width:  236
+    width:  246
     height: 500
     
     property var score: null
@@ -40,7 +40,7 @@ MuseScore {
     
     property var staffLines: [null, null] // [scordaturaStaffLine, translatedStaffLine] // line = [{"name": instrumentLongName, "lines": staffLine}]
     
-    property var liveMode: false
+    property bool liveMode: false
     
     function findSegment(e) {
         while (e && e.type != Element.SEGMENT)
@@ -274,32 +274,29 @@ MuseScore {
 
         console.log("FN transcribe: ", source, target, si, ti, staffLines[source].lines.track);
 
-        /*
-        if ( noNotesOnStaff(staffLines[source].lines) ) {
-            console.log("Nothing to translate...");
-            return
-        }
-        */
 
-        score.selection.selectRange(0, score.lastSegment.tick+1, si, si+1);
-        cmd("copy");
-        score.selection.selectRange(0, score.lastSegment.tick+1, ti, ti+1);
-        score.startCmd();
-        cmd("delete");
-        cmd("paste");
-        
-        //TODO remove scordatura symbol from transcription staff, if already was in scordatura staff 
-        
-        var els = score.selection.elements;
-        if (els) {
-            for (var i = 0;  i < els.length; ++i) {
-                var el = els[i];
-                if (el.type == Element.NOTE) {
-                    translateNote(el, target === 0);
+        if ( !noNotesOnStaff(staffLines[source].lines) ) { // if there are notes to translate, do it
+            
+            score.selection.selectRange(0, score.lastSegment.tick+1, si, si+1);
+            cmd("copy");
+            score.selection.selectRange(0, score.lastSegment.tick+1, ti, ti+1);
+            score.startCmd();
+            cmd("delete");
+            cmd("paste");
+            
+            //TODO remove scordatura symbol from transcription staff, if already was in scordatura staff 
+            
+            var els = score.selection.elements;
+            if (els) {
+                for (var i = 0;  i < els.length; ++i) {
+                    var el = els[i];
+                    if (el.type == Element.NOTE) {
+                        translateNote(el, target === 0);
+                    }
                 }
             }
+            score.endCmd();
         }
-        score.endCmd();
         
         // if mode switched to live, after transcription set liveMode
         if (modeSwitch.checked)
@@ -554,7 +551,7 @@ MuseScore {
     
     function updateCurrentScore() {
         console.log("FN update score");
-        console.log("is curent: ", curScore.is(score), ", curScore: ", curScore, ", score: ", score);
+        console.log("is curent: ", score && curScore.is(score), ", curScore: ", curScore, ", score: ", score);
         if (!curScore || !curScore.is(score)){
             console.log("reset");
             tunings = [];
@@ -565,6 +562,7 @@ MuseScore {
             staffDefs.state = "DEFAULT";
             stringDefs.state = "";
             aplyDef.state = "";
+            modeSwitch.checked = false;
         }
         if (curScore && !curScore.is(score)) {
             console.log("update");
@@ -582,8 +580,10 @@ MuseScore {
                 var scordLines = score.firstSegment().elementAt(tracks[0]);
                 var standLines = score.firstSegment().elementAt(tracks[1]);
                 staffLines = [{"name": scordLines.staff.part.longName, "lines": scordLines}, {"name": standLines.staff.part.longName, "lines": standLines}];
-                scordDef.text = metaScord || findTuning(staffLines[0].lines.staff.part.instruments[0]);
-                standDef.text = metaStand || findTuning(staffLines[1].lines.staff.part.instruments[0]);
+                if ( !scordDef.text.length ) 
+                    scordDef.text = metaScord || findTuning(staffLines[0].lines.staff.part.instruments[0]);
+                if ( !standDef.text.length )
+                    standDef.text = metaStand || findTuning(staffLines[1].lines.staff.part.instruments[0]);
             }
             
         } else if (score && !curScore) {
@@ -605,34 +605,42 @@ MuseScore {
         stringButtons.noteIndex = getSelectedString();
         
         //live mode
-        if (liveMode && state.selectionChanged && !state.undoRedo && state.startLayoutTick > -1){
+        if (liveMode && !state.undoRedo && state.startLayoutTick > -1){
             console.log("liveMode note input");
             
-            var el = score ? score.selection.elements[0] : null;
-            if ( el && el.type == Element.REST || el.type == Element.NOTE ) {
-                
-                duplicate(el);
+            //temporarily disable liveMode to prevent infinite cerusion
+            liveMode = false;
+            
+            var els = score ? score.selection.elements : [];
+            for (var i = 0; i < els.length; ++i) {
+                var el = els[i];
+                if ( el.type == Element.REST || el.type == Element.NOTE ) {
+                    
+                    duplicate(el);
 
-                var tieBack = el.tieBack;
-                var tieForward = el.tieForward;
-                
-                if (tieBack) {
-                    console.log("tie back");
-                    ties(tieBack, true);
-                }
-                if (tieForward){
-                    console.log("tie forward");
-                    ties(tieForward, false);
+                    var tieBack = el.tieBack;
+                    var tieForward = el.tieForward;
+                    
+                    if (tieBack) {
+                        console.log("tie back");
+                        ties(tieBack, true);
+                    }
+                    if (tieForward){
+                        console.log("tie forward");
+                        ties(tieForward, false);
+                    }
                 }
             }
+            // enable liveMode back again
+            liveMode = true;
         }
         
         // save settings
         if (staffLines[0] && staffLines[1]){
             var tracks = [staffLines[0].lines.track, staffLines[1].lines.track].toString();
             var saved = score.metaTag("SCORDATURA_PLUGIN_TRACKS");
-            console.log(tracks, "\n", saved);
             if (saved !== tracks) {
+                console.log("Old setting: \n", tracks, "\n", saved);
                 score.startCmd();
                 score.setMetaTag("SCORDATURA_PLUGIN_TRACKS", tracks);
                 score.endCmd();
@@ -650,8 +658,8 @@ MuseScore {
             var savedStand = score.metaTag("SCORDATURA_PLUGIN_STANDARD_TUNING");
             scordTun = scordTun.toString();
             standTun = standTun.toString();
-            console.log(scordTun, ", ", standTun);
             if (savedScord !== scordTun) {
+                console.log("Old setting - tunings: \n", scordTun, ", ", standTun);
                 score.startCmd();
                 score.setMetaTag("SCORDATURA_PLUGIN_SCORDATURA_TUNING", scordTun);
                 score.endCmd();
@@ -663,12 +671,13 @@ MuseScore {
                 score.endCmd();
                 console.log("newStandTun: ", score.metaTag("SCORDATURA_PLUGIN_STANDARD_TUNING"));
             }
-        } 
-        
+        }
+            
         //highlight coresponding string button
         stringButtons.noteIndex = getSelectedString();
     }
     
+    // plugin white background
     Rectangle {
         color: "#fff"
         anchors.fill: parent
@@ -717,7 +726,6 @@ MuseScore {
                     onPositionChanged: {
                         console.log("switch changed", position);
                         if (checked){
-                        //if (position === 1){
                             if ( !noNotesOnStaff(staffLines[transSelect.currentIndex ^ 1].lines) )
                                 nonEmptyWarning.open();
                             else 
@@ -777,15 +785,18 @@ MuseScore {
                 leftPadding: 6
                 rightPadding: 6
                 enabled: !modeSwitch.checked
+                property color textColor: enabled ? "black" : "darkgray"
                 
                 Label {
                     text: "Translate"
                     font.pixelSize: 16
+                    color: translatorPanel.textColor
                 }
                 Row {
                     Label {
                         anchors.verticalCenter: transSelect.verticalCenter
                         text: "Source staff:"
+                        color: translatorPanel.textColor
                     }
                     ComboBox {
                         id: transSelect
@@ -797,9 +808,11 @@ MuseScore {
                     spacing: 16
                     Label {
                         text: "Target staff:"
+                        color: translatorPanel.textColor
                     }
                     Label {
                         text: transSelect.currentIndex ? "Scordatura" : "Sounding"
+                        color: translatorPanel.textColor
                     }
                 }
                 Button {
@@ -946,7 +959,7 @@ MuseScore {
                         Button {
                             id: setStaff
                             height: parent.height
-                            width: 60
+                            width: 70
                             text: staffLines[index] ? "Change" : "Set"
                             states: [
                                 State {
@@ -964,26 +977,29 @@ MuseScore {
                                 }
                             ]
                             onClicked: {
+                                var tunDef = index ? scordDef : standDef;
+                                
                                 if (staffLines[index]) {
                                     staffLines[index] = null;
                                     staffLinesChanged();
+                                    modeSwitch.checked = false;
                                     //setStaff.state = ""
+                                    //tunings = [];
                                 }
                                 else {
-                                    var sel = score ? score.selection.elements[0] : null,
-                                        tunDef = index ? scordDef : standDef;
+                                    var sel = score ? score.selection.elements[0] : null;
                                         
                                         if ( sel && sel.track > -1 ) {
                                             var lines = score.firstSegment().elementAt(parseInt(sel.track/4)*4);
                                             staffLines[index] = {"name": lines.staff.part.longName, "lines": lines};
                                             staffLinesChanged();
                                             tunDef.text = (index ? score.metaTag("SCORDATURA_PLUGIN_SCORDATURA_TUNING") : score.metaTag("SCORDATURA_PLUGIN_STANDARD_TUNING")) || findTuning(staffLines[index].lines.staff.part.instruments[0]);
-                                            aplyDef.state = "";
                                             setStaff.state = "SET";
                                         }
                                         else setStaff.state = "UNSELECTED"
                                 }
                                 staffDefs.state = staffLines.indexOf(null) == -1 ? "DONE" : "";
+                                aplyDef.state = "";
                             }
                         }
                     }
@@ -1003,14 +1019,9 @@ MuseScore {
                 rightPadding: 6
                 anchors.topMargin: 12
                 spacing: 6
-                enabled: staffLines[0] && staffLines[1] //staffDefs.state == "DONE"
+                enabled: staffLines[0] && staffLines[1]
 
                 states: [
-                    /*State {
-                        name: "DISABLED"
-                        when: staffDefs.state !== "DONE"
-                        //PropertyChanges { target: stringDefs; enabled: false}
-                    },*/
                     State {
                         name: "DONE"
                         when: aplyDef.state == "SET"
@@ -1061,7 +1072,7 @@ MuseScore {
                         id: aplyDef
                         anchors.bottom: parent.bottom
                         height: 53
-                        width: 60
+                        width: 70
                         enabled: aplyDef.state == "SET" || standDef.text && scordDef.text && standDef.text.split(/\s*,\s*/).length === scordDef.text.split(/\s*,\s*/).length
                         text: "Set" 
                         
@@ -1084,6 +1095,7 @@ MuseScore {
                             if (aplyDef.state == "SET") {
                                 tunings = [];
                                 aplyDef.state = ""
+                                modeSwitch.checked = false;
                                 console.log("String defs - set");
                             }
                             else {
