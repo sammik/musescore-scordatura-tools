@@ -11,7 +11,7 @@ MuseScore {
     id: scordaturaPlugin
     menuPath: "Plugins.Scordatura Plugin"
     description: "Plugin for scordatura score writing"
-    version: "1.2"
+    version: "1.2.1"
     
     requiresScore: false
     
@@ -175,14 +175,28 @@ MuseScore {
             return -1;
     }
     
-    function getNoteIndex(note){
+    //check index of note; if note is graceNote, set index of graceChord too
+    function getNoteIndex(note){ 
+        console.log("FN getNoteIndex");
+        var index = [-1, -1];
         
-        if (note.type !== Element.NOTE) return -1
+        if (note.type !== Element.NOTE) return index;
         
         var chord = note.parent;
-        for ( var i = 0; i < chord.notes.length; ++i){
-            if (chord.notes[i].is(note)) return i;
+            
+        for ( var i = 0; i < chord.notes.length; ++i ) {
+            if (chord.notes[i].is(note)) index[1] = i;
         }
+        console.log(note.noteType);
+        console.log(note.noteType != NoteType.NORMAL);
+        if (note.noteType != NoteType.NORMAL) {
+            var mainChord = chord.parent;
+            for ( var j = 0; j < mainChord.graceNotes.length; ++j ) {
+                if (mainChord.graceNotes[j].is(chord)) index[0] = j;
+            }
+        }
+        console.log(index);
+        return index;
     }
     
     function translateNote(note, toScord) {
@@ -248,18 +262,26 @@ MuseScore {
                 
                 // check, if note exists in paralel staff and translate it and set string to it too
                 // TODO crossed strings
-                // TODO grace notes
-                var ni = getNoteIndex(el);
+                var index = getNoteIndex(el);
+                var gi = index[0];
+                var ni = index[1];
                 var seg = findSegment(el);
                 var tr = el.track - (staffLines[0].lines.track - staffLines[1].lines.track) * (scord ? 1 : -1);
                 var chordNew = seg.elementAt(tr);
-                if (chordNew && chordNew.type == Element.CHORD && chordNew.notes[ni]){
-                    var oldNote = chordNew.notes[ni];
-                    var newNote = el.clone();
-                    translateNote(newNote, !scord);
-                    oldNote.pitch = newNote.pitch;
-                    oldNote.tpc1 = newNote.tpc1;
-                    oldNote.tpc2 = newNote.tpc2;
+                if (chordNew && chordNew.type == Element.CHORD && chordNew.graceNotes.length > gi) {
+                    
+                    var chordNotes = gi < 0 ? chordNew.notes : chordNew.graceNotes[gi].notes;
+                    
+                    if (chordNotes.length > ni) {
+                        var oldNote = chordNotes[ni];
+                        var newNote = el.clone();
+                        translateNote(newNote, !scord);
+                        oldNote.pitch = newNote.pitch;
+                        oldNote.tpc1 = newNote.tpc1;
+                        oldNote.tpc2 = newNote.tpc2;
+                        oldNote.string = newNote.string;
+                        oldNote.fret = newNote.fret;
+                    }
                 }
             }
         }
@@ -400,15 +422,16 @@ MuseScore {
     }
 
     function createScordaturaSymbol() {
-                
+        console.log("FN createScordaturaSymbol");
         var posX,
             posY,
             sym,
             //font = (Qt.fontFamilies().indexOf("Leland") !== -1 ? "Leland" : "Bravura"),
-            alternative = (symAlternative.checkState == Qt.Checked);
+            alternative = (symAlternative.checkState == Qt.Checked),
+            track = staffLines[0].lines.track; //scordatura staff first track
         
         cursor.rewind(Cursor.SCORE_START);
-        cursor.track = staffLines[0].lines.track; //scordatura staff first track
+        cursor.track = track;
         
         // to find out, which clef is at the begining, create temporary middle C note
         score.startCmd();
@@ -419,7 +442,7 @@ MuseScore {
         
         // calculate x offset from begining of staves 
         // TODO - check for brackets        
-        posX = staffLines[0].lines.pagePos.x - cursor.element.notes[0].pagePos.x + (alternative ? 2 : 0);
+        posX = staffLines[0].lines.pagePos.x - cursor.element.notes[0].pagePos.x + (alternative ? 1 : 0);
         
         cmd("undo");
         
@@ -428,16 +451,10 @@ MuseScore {
         
         if (alternative) {
             // move clefs right
-            var found = false;
-            for (var seg = score.firstSegment(); seg && !found; seg = seg.next) {
-                for (var track = score.ntracks; track-- > 0; ) {
-                    var el = seg.elementAt(track);
-                    if (el && (el.type == Element.CLEF) ) {
-                        found = true;
-                        el.offsetX = el.posX + 4;
-                    }
-                }
-            }
+            var seg = score.firstSegment();
+            while (seg && seg.elementAt(track).type != Element.CLEF)
+                seg = seg.next;
+            seg.leadingSpace = 4.5;
         } else {
             //move longName left
             var style = score.style,
@@ -462,60 +479,32 @@ MuseScore {
             sym.fontSize = 25;
             sym.offsetX = posX - 5;
             sym.offsetY = 4;
-            console.log("FN createScordaturaSymbol - symbol position x: ", sym.pagePos.x);
+            console.log("symbol position x: ", sym.pagePos.x);
         }
         
         //tuning is scordatura tuning
         var tuning = tunings[1];
         for (var i = tuning.length; i-- > 0; ) {
             var t = tuning[i],
-                y = ( posY + 14 ) - ( diatonic.indexOf(t.name[0]) / 2 ) - ( 3.5 * Number(t.name[t.name.length-1]) );
+                y = ( posY + 14 ) - ( diatonic.indexOf(t.name[0]) / 2 ) - ( 3.5 * Number(t.name[t.name.length-1]) ),
+                
+                createLedgerLine = function(offsetY){
+                    console.log("createLedgerLine", offsetY);
+                    sym = newElement(Element.STAFF_TEXT);
+                    sym.text = "<sym>legerLine</sym>"
+                    sym.autplace = false;
+                    //sym.fontFace = font;
+                    cursor.add(sym);
+                    sym.fontSize = 25;
+                    sym.offsetX = posX - 3.4;
+                    sym.offsetY = offsetY;
+                }
             
             console.log("offset: ", y);
             console.log("i: ", i)
             console.log(t.name);
-            sym = newElement(Element.STAFF_TEXT);
-            sym.text = "<sym>noteheadBlack</sym>"
-            sym.autplace = false;
-            //sym.fontFace = font;
-            cursor.add(sym);
-            sym.fontSize = 20;
-            sym.offsetX = posX - 3;
-            sym.offsetY = y;
             
-            if (t.tpc < 13){
-                sym = newElement(Element.STAFF_TEXT);
-                sym.text = "<sym>accidentalFlat</sym>"
-                sym.autplace = false;
-                //sym.fontFace = font;
-                cursor.add(sym);
-                sym.fontSize = 20;
-                sym.offsetX = posX - 3.8;
-                sym.offsetY = y + 1.6;
-            }
-            if (t.tpc > 19){
-                sym = newElement(Element.STAFF_TEXT);
-                sym.text = "<sym>accidentalSharp</sym>"
-                sym.autplace = false;
-                //sym.fontFace = font;
-                cursor.add(sym);
-                sym.fontSize = 20;
-                sym.offsetX = posX - 3.8;
-                sym.offsetY = y + 1.6;
-            }
-            
-            var createLedgerLine = function(offsetY){
-                console.log("createLedgerLine", offsetY);
-                sym = newElement(Element.STAFF_TEXT);
-                sym.text = "<sym>legerLine</sym>"
-                sym.autplace = false;
-                //sym.fontFace = font;
-                cursor.add(sym);
-                sym.fontSize = 25;
-                sym.offsetX = posX - 3.4;
-                sym.offsetY = offsetY;
-            }
-            
+            //create ledger linef, if neccesary
             if (i === tuning.length - 1){
             
                 if (y > 4.6) {
@@ -539,6 +528,38 @@ MuseScore {
                 if (y < -2.6) {
                     createLedgerLine(-0.999);
                 }
+            }
+            
+            //create noteheads
+            sym = newElement(Element.STAFF_TEXT);
+            sym.text = "<sym>noteheadBlack</sym>"
+            sym.autplace = false;
+            //sym.fontFace = font;
+            cursor.add(sym);
+            sym.fontSize = 20;
+            sym.offsetX = posX - 3;
+            sym.offsetY = y;
+            
+            //add accidentals
+            if (t.tpc < 13){
+                sym = newElement(Element.STAFF_TEXT);
+                sym.text = "<sym>accidentalFlat</sym>"
+                sym.autplace = false;
+                //sym.fontFace = font;
+                cursor.add(sym);
+                sym.fontSize = 20;
+                sym.offsetX = posX - 3.8;
+                sym.offsetY = y + 1.6;
+            }
+            if (t.tpc > 19){
+                sym = newElement(Element.STAFF_TEXT);
+                sym.text = "<sym>accidentalSharp</sym>"
+                sym.autplace = false;
+                //sym.fontFace = font;
+                cursor.add(sym);
+                sym.fontSize = 20;
+                sym.offsetX = posX - 3.8;
+                sym.offsetY = y + 1.6;
             }
         }
         curScore.endCmd();
