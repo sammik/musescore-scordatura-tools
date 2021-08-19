@@ -1155,7 +1155,7 @@ MuseScore {
                 Rectangle {
                     id: validate
                     visible: false
-                    width: settings.width
+                    width: settings.width - 12
                     height: validatorMessage.implicitHeight + validatorButtons.implicitHeight
                     color: "transparent"
                     border.color: "#FF0000"
@@ -1181,6 +1181,7 @@ MuseScore {
                             text: "Change"
                             onClicked: {
                                 aplyDef.state = "";
+                                validate.visible = false;
                             }
                         }
                         Button {
@@ -1189,6 +1190,7 @@ MuseScore {
                             onClicked: {
                                 aplyDef.state = "SET";
                                 menuBar.currentIndex = 0;
+                                validate.visible = false
                             }
                         }
                     }
