@@ -11,7 +11,7 @@ MuseScore {
     id: scordaturaPlugin
     menuPath: "Plugins.Scordatura Plugin"
     description: "Plugin for scordatura score writing"
-    version: "1.2.1"
+    version: "1.2.2"
     
     requiresScore: false
     
@@ -306,8 +306,19 @@ MuseScore {
             cmd("delete");
             cmd("paste");
             
-            //TODO remove scordatura symbol from transcription staff, if already was in scordatura staff 
+            //remove scordatura symbol from target staff, if already was in source staff 
+            cursor.rewind(Cursor.SCORE_START);
+            var annotations = cursor.segment.annotations;
+            for (var i = 0; i < annotations.length; ++i){
+                var an = annotations[i];
+                if ( an.track == ti * 4 && ( an.text == "<sym>staff5LinesWide</sym>" || an.text == "<sym>legerLine</sym>" || an.text == "<sym>noteheadBlack</sym>" || an.text == "<sym>accidentalSharp</sym>" || an.text == "<sym>accidentalFlat</sym>" ) ){
+                    console.log(an.text);
+                    removeElement(an);
+                    --i;
+                }
+            }
             
+            // Translate
             var els = score.selection.elements;
             if (els) {
                 for (var i = 0;  i < els.length; ++i) {
@@ -421,14 +432,14 @@ MuseScore {
         }
     }
 
-    function createScordaturaSymbol() {
-        console.log("FN createScordaturaSymbol");
+    function createTuningSymbol() {
+        console.log("FN createTuningSymbol");
         var posX,
             posY,
             sym,
             //font = (Qt.fontFamilies().indexOf("Leland") !== -1 ? "Leland" : "Bravura"),
             alternative = (symAlternative.checkState == Qt.Checked),
-            track = staffLines[0].lines.track; //scordatura staff first track
+            track = staffLines[tunSymBox.currentIndex].lines.track;
         
         cursor.rewind(Cursor.SCORE_START);
         cursor.track = track;
@@ -482,8 +493,7 @@ MuseScore {
             console.log("symbol position x: ", sym.pagePos.x);
         }
         
-        //tuning is scordatura tuning
-        var tuning = tunings[1];
+        var tuning = tunings[tunSymBox.currentIndex ^ 1];
         for (var i = tuning.length; i-- > 0; ) {
             var t = tuning[i],
                 y = ( posY + 14 ) - ( diatonic.indexOf(t.name[0]) / 2 ) - ( 3.5 * Number(t.name[t.name.length-1]) ),
@@ -705,9 +715,6 @@ MuseScore {
                 console.log("newStandTun: ", score.metaTag("SCORDATURA_PLUGIN_STANDARD_TUNING"));
             }
         }
-            
-        //highlight coresponding string button
-        stringButtons.noteIndex = getSelectedString();
     }
     
     // plugin white background
@@ -1242,13 +1249,18 @@ MuseScore {
                 }
 
                 Label {
-                    text: "Create Scordatura Symbol\n(experimental)"
+                    text: "Create Tuning Symbol\n(experimental)"
                     font.pixelSize: 16
+                }
+                ComboBox {
+                    id: tunSymBox
+                    height: 30
+                    model: ["Scordatura", "Sounding"]
                 }
                 Button {
                     text: "Create"
-                    enabled: !!tunings[1]
-                    onClicked: createScordaturaSymbol();
+                    enabled: !!tunings.length
+                    onClicked: createTuningSymbol();
                 }
                 CheckBox {
                     id: symAlternative
